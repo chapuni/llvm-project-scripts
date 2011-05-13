@@ -15,8 +15,6 @@ while (<$F>) {
     $master_hash{$repo} = $h;
     print "$h $repo\n";
     chdir("$PWD/$repo");
-#    &get_commit($h);
-#    &get_commits($repo);
     chdir($PWD);
 }
 close($F);
@@ -137,38 +135,6 @@ sub get_commits
         }
     }
     close($F);
-}
-
-sub get_commit
-{
-    my ($h) = @_;
-    my $F;
-    my %c = ();
-    open($F, "git cat-file commit $h |") || die;
-    while (<$F>) {
-        chomp;
-        if (/^(\w+)\s+(.*)/) {
-            $c{$1} = $2;
-        } elsif (/^$/) {
-            last;
-        } else {
-            die;
-        }
-    }
-    my @msg = <$F>;
-    close($F);
-
-    if ($msg[$#msg] =~/git-svn-id:.+\@(\d+)/) {
-        printf "rev:$1\n";
-        pop(@msg);
-    }
-    while ($msg[$#msg] =~/^[\r\n]*$/) {
-        pop(@msg);
-        die unless @msg > 0;
-    }
-    $c{'msg'} = join('', @msg);
-    $commits{$h} = {%c};
-    return %c;
 }
 
 #EOF
