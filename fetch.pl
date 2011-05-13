@@ -56,7 +56,9 @@ for $r (sort {$a <=> $b} keys %revs) {
                 $gitm = `git cat-file blob $mh`;
             }
             open($F, "| git hash-object -w --stdin > .git/_.bak") || die;
-            print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = http://llvm.org/git/$repo.git\n";
+	    $X = $path;
+	    $X = "LLVM" if $X eq 'llvm';
+            print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = git\@github.com:chapuni/$X.git\n";
             close($F);
             $mh = `cat .git/_.bak`;
             chomp $mh;
