@@ -139,22 +139,6 @@ sub get_commits
     close($F);
 }
 
-# ($hash, $origin)
-sub get_dag
-{
-    my ($h, $org) = @_;
-    my @hashes = ();
-    while (!$commits{$h}) {
-        print "$h\n";
-        my %c = &get_commit($h);
-        die unless %c;
-        push(@hashes, $h);
-        $h = $c{'parent'};
-        last if $h eq '';
-    }
-    return @hashes;
-}
-
 sub get_commit
 {
     my ($h) = @_;
@@ -185,95 +169,6 @@ sub get_commit
     $c{'msg'} = join('', @msg);
     $commits{$h} = {%c};
     return %c;
-}
-
-# tree 6ba6abd0fb4097764b11d5088d20823ee65a6eac
-# parent 0a6ea83f393d06fb424c470777a1c3e8a8c50ab1
-# author Devang Patel <dpatel@apple.com> 1303495797 +0000
-# committer Devang Patel <dpatel@apple.com> 1303495797 +0000
-
-
-for $sub (sort keys %mhash) {
-    chdir("$PWD/$sub") || die "$PWD/$sub";
-    open($F, "git log --oneline $mhash{$sub}..origin/master |") || die;
-    while (<$F>) {
-        die unless /^([0-9a-f]{6,})/;
-        $h = $1;
-        open($FC, "git cat-file commit $h |") || die;
-        @c = <$FC>;
-        close($FC);
-        $an = $ad = $cn = $cd = '';
-        if ($c[$#c] =~/git-svn-id:.+\@(\d+)/) {
-            $r = $1;
-            pop(@c);
-        }
-        while ($c[$#c] =~/^[\r\n]*$/) {
-            pop(@c);
-            die unless @c > 0;
-        }
-        while (1) {
-            $l = shift(@c);
-            if ($l =~ /^tree / || $l =~ /^parent /) {
-                next;
-            } elsif ($l =~ /^author\s+(.+)\s+(\d{10})/) {
-                $an{$h} = $1;
-                $ad{$h} = $2;
-            } elsif ($l =~ /^committer\s+(.+)\s+(\d{10})/) {
-                $cn{$h} = $1;
-                $cd{$h} = $2;
-            } else {
-                chomp $l;
-                die unless $l eq '';
-                last;
-            }
-        }
-        $revs{$r}{$h} = $sub;
-        $c = join('', @c);
-        die unless $msg{$h} eq '' || $msg{$h} eq $c;
-        $msg{$h} = $c;
-    }
-    close($F);
-}
-
-chdir($PWD);
-    
-for (sort {$a <=> $b} keys %revs) {
-    printf("%6d\n:", $rev);
-    for $h (keys %{$revs{$rev}}) {
-        $s = $revs{$rev}{$h};
-        $c = $msg{$h};
-        $cn = $cn{$h};
-        $cd = $cd{$h};
-        
-        die;
-        if (0) {
-        print "$revs{$rev}{$h}\t$h\n";
-        chdir("$PWD/$s") || die;
-        system("git checkout -q -f $h");
-        chdir($PWD);
-        system("git add $s");
-        }
-    }
-    chdir($PWD);
-    open($F, "| git commit -F - --author \"$cn\" --date \"$cd\"") || die;
-    print $F "[r$rev]".$c;
-    close($F);
-}
-
-# $h
-sub parse_gitmodules
-{
-    my ($h) = @_;
-    my $F;
-    my $h = '';
-    open($F, "git-ls-tree $h |") | die;
-    for (<$F>) {
-        next unless /^([0-7]+)\s+(\w+)\s+([0-9A-Fa-f]{40,})\s+\.gitmodules/;
-        $h = $3;
-        last;
-    }
-    die unless $h ne '';
-    die $h;
 }
 
 #EOF
