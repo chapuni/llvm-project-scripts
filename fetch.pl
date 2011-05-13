@@ -22,11 +22,9 @@ close($F);
 # 次に、各リポジトリ候補から結果を得て回る。
 open($F, "find -depth -mindepth 2 -maxdepth 2 -type d -name .git |") || die;
 while (<$F>) {
-    print;
     chomp;
     s=^\./==;
     next unless m@^(.+)/\.git$@;
-    print "*$1\n";
     chdir("$PWD/$1") || die $1;
     &get_commits($1);
     chdir($PWD);
@@ -77,7 +75,11 @@ for $r (sort {$a <=> $b} keys %revs) {
     print "r$r:$ch\n";
 }
 
-die "Completed die!";
+print STDERR "Completed.\n";
+
+system("git checkout -f master");
+system("git merge --ff-only $ch");
+exit;
 
 sub get_commits
 {
@@ -85,21 +87,29 @@ sub get_commits
     my $F;
     my $a;
     my $head = $master_hash{$dir};
-    #die unless $commits{$head};
-    open($F, "git show-ref master |") || die;
+    my $rem = '';
+
+    # get upstream
+    open($F, "git remote -v |") || die;
     while (<$F>) {
-        next unless /^([0-9a-f]{40,})\s+(\S+)/;
-        #print "$1($2)\n";
-        if ($head ne '') {
-            $a .= " $master_hash{$dir}..$1";
-        } else {
-            $a .= " $1";
-        }
+        next unless m=^(\S+)\s+http://llvm\.org/git/$dir\.git\s+=;
+        $rem = $1."/master";
+        last;
     }
-    print "refs: $a\n";
     close($F);
+    if ($rem eq '') {
+        system("git remote -v");
+        die "Why didn't you track http://llvm.org/git/$dir.git ?";
+    }
+
+    if ($head ne '') {
+        $rem = "$head..$rem";
+    }
+
+    print STDERR "$dir\t$rem\n";
+
     my $f = 0;
-    open($F, "git log --pretty=raw $a |") || die;
+    open($F, "git log --pretty=raw $rem |") || die;
     while (<$F>) {
         if ($f) {
             if (/^(\w+)\s+([0-9a-f]{40,})/) {
