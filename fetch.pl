@@ -15,7 +15,7 @@ while (<$F>) {
     $master_hash{$repo} = $h;
     print "$h $repo\n";
     chdir("$PWD/$repo");
-    &get_commit($h);
+#    &get_commit($h);
 #    &get_commits($repo);
     chdir($PWD);
 }
