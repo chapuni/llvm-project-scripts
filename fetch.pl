@@ -56,7 +56,7 @@ for $r (sort {$a <=> $b} keys %revs) {
                 $gitm = `git cat-file blob $mh`;
             }
             open($F, "| git hash-object -w --stdin > .git/_.bak") || die;
-	    $X = $path;
+	    $X = $repo;
 	    $X = "LLVM" if $X eq 'llvm';
             print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = git\@github.com:chapuni/$X.git\n";
             close($F);
@@ -92,7 +92,7 @@ sub get_commits
     while (<$F>) {
         next unless /^([0-9a-f]{40,})\s+(\S+)/;
         #print "$1($2)\n";
-        if ($commits{$head} ne '') {
+        if ($head ne '') {
             $a .= " $master_hash{$dir}..$1";
         } else {
             $a .= " $1";
