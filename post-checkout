@@ -1,0 +1,49 @@
+#!/usr/bin/perl
+
+$PWD = $ENV{PWD};
+
+open($F, "git symbolic-ref -q HEAD |") || die;
+while (<$F>) {
+    chomp;
+    next unless m=refs/=;
+    $headsym = $_;
+    print STDErRR "bra: <$headsym>\n";
+    last;
+}
+close($F);
+
+open($F, "git submodule foreach --quiet 'echo -n \$path,\$sha1,; git rev-parse HEAD'|") || die;
+while (<$F>) {
+    #print;
+    next unless /^(\S+),([0-9a-f]{40,}),([0-9a-f]{40,})/;
+    print STDERR "<$1> <$2> <$3>\n";
+    $hashes{$1} = $2;
+}
+close($F);
+
+for $path (keys %hashes) {
+    my $lh = '';
+    chdir("$PWD/$path") || die;
+    print "$hashes{$path} $PWD/$path\n";
+    if ($headsym ne '') {
+        open(my $F, "git show-ref --hash $headsym |") || die;
+        while (<$F>) {
+            next unless /^([0-9a-f]{40,})/;
+            $lh = $1;
+            print STDERR "$lh: local head\n";
+            last;
+        }
+        close($F);
+    }
+    if ($lh eq $hashes{$path}) {
+	die if $lh eq '';
+	print STDERR "$path: git chekcout $headsym\n";
+	system("git checkout $headsym");
+    } else {
+	print STDERR "$path trying detached $hashes{$path}\n";
+	system("git checkout -q $hashes{$path}");
+    }
+}
+chdir($PWD);
+
+#EOF
