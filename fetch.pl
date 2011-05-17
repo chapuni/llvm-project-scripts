@@ -5,19 +5,21 @@ $PWD = $ENV{PWD};
 # さいしょに, master に含まれている commit を得る。
 # FIXME: Make sure index is clean.
 ($ch) = `git show-ref refs/heads/master` =~ /([0-9a-f]{40,})/;
-system("git read-tree --reset $ch") && die;
-open($F, "git ls-tree $ch |") || die;
-while (<$F>) {
-    next unless /^160000\s+commit\s+([0-9a-f]{40,})\s+(\S+)/;
-    $h = $1;
-    $repo = $2;
-    push(@repos, $repo);
-    $master_hash{$repo} = $h;
-    print "$h $repo\n";
-    chdir("$PWD/$repo");
-    chdir($PWD);
+system("git read-tree --reset $ch");
+if ($ch ne '') {
+    open($F, "git ls-tree $ch |") || die;
+    while (<$F>) {
+        next unless /^160000\s+commit\s+([0-9a-f]{40,})\s+(\S+)/;
+        $h = $1;
+        $repo = $2;
+        push(@repos, $repo);
+        $master_hash{$repo} = $h;
+        print "$h $repo\n";
+        chdir("$PWD/$repo");
+        chdir($PWD);
+    }
+    close($F);
 }
-close($F);
 
 # 次に、各リポジトリ候補から結果を得て回る。
 open($F, "find -depth -mindepth 2 -maxdepth 2 -type d -name .git |") || die;
@@ -41,15 +43,16 @@ for $r (sort {$a <=> $b} keys %revs) {
         my $repo = $commits{$h}{REPO};
         system("git update-index --add --cacheinfo 160000 $h $repo\n")
             && die;
+        my ($mode, $mh) = ('100644', '');
         if ($master_hash{$repo} eq '') {
-            my $gitm = '';
-            my ($mode, $mh)
-                = `git ls-tree $ch .gitmodules`
-                =~ /^(\d+)\s+blob\s+([0-9a-f]{40,})/;
-            if ($mh eq '') {
-                $mode = '100644';
-            } else {
-                $gitm = `git cat-file blob $mh`;
+            if ($ch ne '') {
+                my $gitm = '';
+                my ($mode, $mh)
+                    = `git ls-tree $ch .gitmodules`
+                    =~ /^(\d+)\s+blob\s+([0-9a-f]{40,})/;
+                if ($mh ne '') {
+                    $gitm = `git cat-file blob $mh`;
+                }
             }
             open($F, "| git hash-object -w --stdin > .git/_.bak") || die;
             $X = $repo;
@@ -59,16 +62,22 @@ for $r (sort {$a <=> $b} keys %revs) {
             $mh = `cat .git/_.bak`;
             chomp $mh;
             system("git update-index --add --cacheinfo $mode $mh .gitmodules")
-                && die;
-            $master_hash{$repo} = $ch;
+                && die "git update-index --add --cacheinfo $mode $mh .gitmodules";
+            $master_hash{$repo} = $mh;
         }
     }
     open($F, "git write-tree |") || die;
     my $th = <$F>;
     chomp $th;
     close($F);
-    open($F, "| git commit-tree $th -p $ch > .git/_.bak") || die "<$ch $th>";
-    print $F "[r$r]$msg";
+    my $gitct;
+    if ($ch ne '') {
+        $gitct = "git commit-tree $th -p $ch";
+    } else {
+        $gitct = "git commit-tree $th";
+    }
+    open($F, "| $gitct > .git/_.bak") || die $gitct;
+    print $F "[r$r] $msg";
     close($F);
     $ch = `cat .git/_.bak`;
     chomp $ch;
@@ -130,7 +139,7 @@ sub get_commits
                 last if $commits{$h};
                 $commits{$h}{REPO} = $dir;
                 next;
-            } elsif (/^    (\s*)$/) {
+            } elsif (/^    (\s*)$/s) {
                 $msg .= $1;
                 next;
             } elsif (/git-svn-id:.+\@(\d+)/) {
@@ -138,7 +147,7 @@ sub get_commits
                 $commits{$h}{REV} = $1;
                 push(@{$revs{$1}}, $h);
                 next;
-            } elsif (/^    (.*)$/) {
+            } elsif (/^    (.*)$/s) {
                 $commits{$h}{MSG} .= $msg . $1;
                 $msg = '';
             }
