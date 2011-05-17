@@ -56,8 +56,12 @@ for $r (sort {$a <=> $b} keys %revs) {
             }
             open($F, "| git hash-object -w --stdin > .git/_.bak") || die;
             $X = $repo;
-            $X = "LLVM" if $X eq 'llvm';
-            print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = git\@github.com:chapuni/$X.git\n";
+            if (1) {
+                print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = http://llvm.org/git/$repo.git\n";
+            } else {
+                $X = "LLVM" if $X eq 'llvm';
+                print $F "$gitm\[submodule \"$repo\"]\n\tpath = $repo\n\turl = git\@github.com:chapuni/$X.git\n";
+            }
             close($F);
             $mh = `cat .git/_.bak`;
             chomp $mh;
