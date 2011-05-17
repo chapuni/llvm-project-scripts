@@ -45,9 +45,9 @@ for $r (sort {$a <=> $b} keys %revs) {
             && die;
         my ($mode, $mh) = ('100644', '');
         if ($master_hash{$repo} eq '') {
+            my $gitm = '';
             if ($ch ne '') {
-                my $gitm = '';
-                my ($mode, $mh)
+                ($mode, $mh)
                     = `git ls-tree $ch .gitmodules`
                     =~ /^(\d+)\s+blob\s+([0-9a-f]{40,})/;
                 if ($mh ne '') {
