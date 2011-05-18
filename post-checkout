@@ -36,12 +36,13 @@ for $path (keys %hashes) {
         close($F);
     }
     if ($lh eq $hashes{$path}) {
-	die if $lh eq '';
-	print STDERR "$path: git chekcout $headsym\n";
-	system("git checkout $headsym");
+        die if $lh eq '';
+        print STDERR "$path: git chekcout $headsym\n";
+        die unless $headsym =~ m=^refs/heads/(.+)$=;
+        system("git checkout $1");
     } else {
-	print STDERR "$path trying detached $hashes{$path}\n";
-	system("git checkout -q $hashes{$path}");
+        print STDERR "$path trying detached $hashes{$path}\n";
+        system("git checkout -q $hashes{$path}");
     }
 }
 chdir($PWD);
