@@ -42,7 +42,14 @@ for $path (keys %hashes) {
         system("git checkout $1");
     } else {
         print STDERR "$path trying detached $hashes{$path}\n";
-        system("git checkout -q $hashes{$path}");
+        if (system("git checkout -q $hashes{$path}") != 0) {
+            # try to pull
+            die unless $headsym =~ m=^refs/heads/(.+)$=;
+	    print STDERR "PULL $headsym <= $hashes{$path}\n";
+            system("git checkout $headsym");
+            system("git fetch --all");
+            system("git merge --ff-only $hashes{$path}");
+        }
     }
 }
 chdir($PWD);
