@@ -46,7 +46,7 @@ for $path (keys %hashes) {
             # try to pull
             die unless $headsym =~ m=^refs/heads/(.+)$=;
 	    print STDERR "PULL $headsym <= $hashes{$path}\n";
-            system("git checkout $headsym");
+            system("git checkout $1");
             system("git fetch --all");
             system("git merge --ff-only $hashes{$path}");
         }
