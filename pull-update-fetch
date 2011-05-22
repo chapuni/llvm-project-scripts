@@ -1,0 +1,14 @@
+#!/bin/sh
+
+SCRIPTS=/home/chapuni/llvm-project-scripts
+PROJECTS=/home/chapuni/llvm-project
+
+cd $PROJECTS
+git checkout master
+git pull
+git submodule foreach 'git checkout master; git pull'
+git submodule foreach 'git checkout master; git pull'
+$SCRIPTS/fetch.pl
+git checkout master
+git push github
+git submodule foreach 'git push github;true'
