@@ -7,7 +7,7 @@ while (<$F>) {
     chomp;
     next unless m=refs/=;
     $headsym = $_;
-    print STDErRR "bra: <$headsym>\n";
+    print STDERR "bra: <$headsym>\n";
     last;
 }
 close($F);
