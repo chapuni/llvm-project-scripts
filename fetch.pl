@@ -127,7 +127,7 @@ sub get_commits
     print STDERR "$dir\t$rem\n";
 
     my $f = 0;
-    open($F, "git log --pretty=raw $rem |") || die;
+    open($F, "git log --pretty=raw --decorate=no $rem |") || die;
     while (<$F>) {
         if ($f) {
             if (/^(\w+)\s+([0-9a-f]{40,})/) {
