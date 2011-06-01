@@ -85,6 +85,10 @@ for $r (sort {$a <=> $b} keys %revs) {
     $ch = `cat .git/_.bak`;
     chomp $ch;
     system("git tag -f r$r $ch");
+    if (++$ntags >= 1000) {
+        system("git pack-refs");
+        $ntags = 0;
+    }
     #system("git tag -f $_/r$r $ch") for (@repos);
     print "r$r:$ch\n";
 }
