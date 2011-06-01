@@ -35,6 +35,7 @@ close($F);
 
 # write!
 for $r (sort {$a <=> $b} keys %revs) {
+    my @repos = ();
     for $h (@{$revs{$r}}) {
         $msg = $commits{$h}{MSG};
         for (grep(/^GIT_/, keys %{$commits{$h}})) {
@@ -65,6 +66,7 @@ for $r (sort {$a <=> $b} keys %revs) {
                 && die "git update-index --add --cacheinfo $mode $mh .gitmodules";
             $master_hash{$repo} = $mh;
         }
+        push(@repos, $repo);
     }
     open($F, "git write-tree |") || die;
     my $th = <$F>;
@@ -77,10 +79,13 @@ for $r (sort {$a <=> $b} keys %revs) {
         $gitct = "git commit-tree $th";
     }
     open($F, "| $gitct > .git/_.bak") || die $gitct;
-    print $F "[r$r] $msg";
+    #print $F "[r$r] $msg";
+    print $F $msg;
     close($F);
     $ch = `cat .git/_.bak`;
     chomp $ch;
+    system("git tag -f r$r $ch");
+    #system("git tag -f $_/r$r $ch") for (@repos);
     print "r$r:$ch\n";
 }
 
