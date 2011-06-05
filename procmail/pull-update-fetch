@@ -5,9 +5,9 @@ PROJECTS=/home/chapuni/llvm-project
 
 cd $PROJECTS
 git checkout master
-git pull
-git submodule foreach 'git checkout master; git pull'
-git submodule foreach 'git checkout master; git pull'
+git pull --ff-only
+git submodule foreach 'git checkout master; git pull --ff-only'
+git submodule foreach 'git checkout master; git pull --ff-only'
 $SCRIPTS/fetch.pl
 git checkout master
 git push github
