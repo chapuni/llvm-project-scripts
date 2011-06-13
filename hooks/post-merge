@@ -1,5 +1,5 @@
 #!/bin/sh
 
-git submodule foreach --quiet '(git cat-file -e $sha1 || git fetch); git merge --ff-only $sha1'
+git submodule foreach --quiet '(git cat-file -e $sha1 || git fetch); git merge $sha1'
 
 #EOF
