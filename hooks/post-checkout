@@ -1,57 +1,24 @@
 #!/usr/bin/perl
 
-$PWD = $ENV{PWD};
+($headsym) = `git symbolic-ref -q HEAD` =~ m=^refs/heads/(\S+)$=;
 
-open($F, "git symbolic-ref -q HEAD |") || die;
-while (<$F>) {
-    chomp;
-    next unless m=refs/=;
-    $headsym = $_;
-    print STDERR "bra: <$headsym>\n";
-    last;
-}
-close($F);
+$cmd = <<EOS;
+(git cat-file -e \$sha1 || git fetch --all);
+fgrep -q \$sha1 .git/HEAD
+  || (echo Checking out detached submodule \$path...;
+        git checkout -q \$sha1)
+EOS
+    ;
 
-open($F, "git submodule foreach --quiet 'echo -n \$path,\$sha1,; git rev-parse HEAD'|") || die;
-while (<$F>) {
-    #print;
-    next unless /^(\S+),([0-9a-f]{40,}),([0-9a-f]{40,})/;
-    print STDERR "<$1> <$2> <$3>\n";
-    $hashes{$1} = $2;
-}
-close($F);
+$cmd = <<EOS if $headsym ne '';
+(git show-ref -q $headsym && git checkout -q $headsym)
+&& ((git cat-file -e \$sha1 || git fetch);
+    (git rev-parse HEAD | fgrep -q \$sha1)
+     || git merge --ff-only \$sha1)
+|| ($cmd)
+EOS
+    ;
 
-for $path (keys %hashes) {
-    my $lh = '';
-    chdir("$PWD/$path") || die;
-    print "$hashes{$path} $PWD/$path\n";
-    if ($headsym ne '') {
-        open(my $F, "git show-ref --hash $headsym |") || die;
-        while (<$F>) {
-            next unless /^([0-9a-f]{40,})/;
-            $lh = $1;
-            print STDERR "$lh: local head\n";
-            last;
-        }
-        close($F);
-    }
-    if ($lh eq $hashes{$path}) {
-        die if $lh eq '';
-        print STDERR "$path: git chekcout $headsym\n";
-        die unless $headsym =~ m=^refs/heads/(.+)$=;
-        system("git checkout $1");
-    } else {
-        print STDERR "$path trying detached $hashes{$path}\n";
-        if (system("git checkout -q $hashes{$path}") != 0) {
-            # try to pull
-            die unless $headsym =~ m=^refs/heads/(.+)$=;
-	    print STDERR "PULL $headsym <= $hashes{$path}\n";
-            system("git checkout $1");
-            system("git fetch --all");
-            system("git merge --ff-only $hashes{$path}");
-        }
-    }
-}
-chdir($PWD);
+$cmd =~ s/[\r\n]/ /g;
 
-#EOF
+exit system("git submodule foreach --quiet '$cmd'");
