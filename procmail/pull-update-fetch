@@ -5,11 +5,15 @@ PROJECTS=/home/chapuni/llvm-project
 
 cd $PROJECTS
 git checkout master
-git pull --ff-only
-git submodule foreach 'git checkout master; git pull --ff-only'
-git submodule foreach 'git checkout master; git pull --ff-only'
+#git pull --ff-only
+REPOS=`git submodule foreach -q 'echo $path'`
+for x in $REPOS; do (cd $x; git pull --ff-only) & done
+wait
+for x in $REPOS; do (cd $x; git pull --ff-only) & done
+wait
+for x in $REPOS; do (cd $x; git push github) & done
 $SCRIPTS/fetch.pl
 git checkout master
+wait
 git push github master
 #git push github master --tags
-git submodule foreach 'git push github;true'
