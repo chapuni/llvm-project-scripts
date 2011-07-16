@@ -10,5 +10,6 @@ git submodule foreach 'git checkout master; git pull --ff-only'
 git submodule foreach 'git checkout master; git pull --ff-only'
 $SCRIPTS/fetch.pl
 git checkout master
-git push github --tags
+git push github master
+#git push github master --tags
 git submodule foreach 'git push github;true'
