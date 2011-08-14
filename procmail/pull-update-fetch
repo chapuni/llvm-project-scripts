@@ -12,8 +12,8 @@ wait
 for x in $REPOS; do (cd $x; git pull --ff-only) & done
 wait
 for x in $REPOS; do (cd $x; git push github) & done
+wait
 $SCRIPTS/fetch.pl
 git checkout master
-wait
 git push github master
 #git push github master --tags
