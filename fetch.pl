@@ -14,7 +14,7 @@ if ($ch ne '') {
         $repo = $2;
         push(@repos, $repo);
         $master_hash{$repo} = $h;
-        print "$h $repo\n";
+        print STDERR "$h $repo\n";
         chdir("$PWD/$repo");
         chdir($PWD);
     }
@@ -36,7 +36,10 @@ close($F);
 # write!
 for $r (sort {$a <=> $b} keys %revs) {
     my @repos = ();
+    @files = ();
     for $h (@{$revs{$r}}) {
+        $hh = $h;
+        push(@files, $commits{$h}{FILES});
         $msg = $commits{$h}{MSG};
         for (grep(/^GIT_/, keys %{$commits{$h}})) {
             $ENV{$_} = $commits{$h}{$_};
@@ -90,13 +93,47 @@ for $r (sort {$a <=> $b} keys %revs) {
         $ntags = 0;
     }
     #system("git tag -f $_/r$r $ch") for (@repos);
-    print "r$r:$ch\n";
+
+# revision=r136765&when=341778&who=xNAKAMURA+Takumi&branch=master&comments=XXX%0AYYY&files=%5B%22aaa%22,%22bbb%22%5D&revlink=xxxx&repository=rerere&links=%5B%22aaa%22,%22bbb%22%5D&project=llvm-project&xxx=yyy
+
+    print STDERR "r$r:$ch\n";
+    %js = (branch=>'master',
+           project=>'llvm-project');
+    $js{'revision'} = "r$r";
+    $js{'repository'} = 'chapuni@192.168.1.194:/home/chapuni/llvm-project';
+    $commits{$hh}{GIT_AUTHOR_DATE} =~ /^(\d+)/;
+    $js{'when'} = $1;
+    $js{'files'} = '['.join(',',@files).']';
+    $js{'who'} = sprintf("%s <%s>",
+                         $commits{$hh}{GIT_AUTHOR_NAME},
+                         $commits{$hh}{GIT_AUTHOR_EMAIL});
+    $js{'comments'} = $commits{$hh}{MSG};
+
+    for (keys %js) {
+        my @a = split(//, $js{$_});
+        for (@a) {
+            if ($_ eq ' ') {
+                $_ = '+';
+            } elsif (/^\r*\n$/) {
+                $_ = '%0A';
+            } elsif (/^[-0-9A-Z_a-z]$/) {
+            } else {
+                $_ = sprintf('%%%02X', ord);
+            }
+        }
+        $js{$_} = join('', @a);
+    }
+    $js = join('&', map {"$_=$js{$_}"} sort keys %js);
+    open($fj, "> .git/_.bak") || die;
+    print $fj $js;
+    close($fj);
+    system('wget http://bb.pgr.jp/change_hook/base --post-file=.git/_.bak');
 }
 
 print STDERR "Completed.\n";
 
-system("git checkout -f master");
-system("git merge --ff-only $ch");
+system("git checkout -q -f master");
+system("git merge -q --ff-only $ch");
 exit;
 
 sub get_commits
@@ -147,12 +184,16 @@ sub get_commits
                 $f = 1;
                 last if $commits{$h};
                 $commits{$h}{REPO} = $dir;
+                my $df;
+                open($df, "git diff-tree --numstat $h |");
+                $commits{$h}{FILES} = join(',', grep(s/^\d+\s+\d+\s+(.*)\r*\n*$/\"$dir\/\1\"/, <$df>));
+                close($df);
                 next;
             } elsif (/^    (\s*)$/s) {
                 $msg .= $1;
                 next;
             } elsif (/git-svn-id:.+\@(\d+)/) {
-                print "$dir $h r$1\n" unless $1 % 1000;
+                print STDERR "$dir $h r$1\n" unless $1 % 1000;
                 $commits{$h}{REV} = $1;
                 push(@{$revs{$1}}, $h);
                 next;
