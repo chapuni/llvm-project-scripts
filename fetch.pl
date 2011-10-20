@@ -87,7 +87,7 @@ for $r (sort {$a <=> $b} keys %revs) {
     close($F);
     $ch = `cat .git/_.bak`;
     chomp $ch;
-    system("git tag -f r$r $ch");
+    system("git tag -f r$r $ch") && die;
     if (++$ntags >= 1000) {
         system("git pack-refs");
         $ntags = 0;
@@ -124,6 +124,7 @@ for $r (sort {$a <=> $b} keys %revs) {
         $js{$_} = join('', @a);
     }
     $js = join('&', map {"$_=$js{$_}"} sort keys %js);
+    push(@js, $js);
     open($fj, "> .git/_.bak") || die;
     print $fj $js;
     close($fj);
