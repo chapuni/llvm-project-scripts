@@ -7,13 +7,14 @@ cd $PROJECTS
 git checkout master
 #git pull --ff-only
 REPOS=`git submodule foreach -q 'echo $path'`
-for x in $REPOS; do (cd $x; git pull --ff-only) & done
+for x in $REPOS; do (cd $x; git fetch) & done
 wait
-for x in $REPOS; do (cd $x; git pull --ff-only) & done
+for x in $REPOS; do (cd $x; git fetch) & done
 wait
+for x in $REPOS; do (cd $x; git checkout -f; git clean -fx; git reset --hard llvm.org/master); done
 for x in $REPOS; do (cd $x; git push github) & done
-wait
 $SCRIPTS/fetch.pl
+wait
 git checkout master
 git push github master
 #git push github master --tags
