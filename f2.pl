@@ -9,20 +9,6 @@ $json++ if grep(/JSON/, @ARGV);
 $m_master = 'm/master';
 $t_master = 't/master';
 
-eval "require 'revs.pl'";
-
-@m_revs = sort {$a <=> $b} keys %dic_subm;
-
-if (scalar(@m_revs) != scalar(keys %dic_revs)) {
-	open($REVLOG, "> revs.pl") || die;
-	for my $r (@m_revs) {
-		&revlog($REVLOG, $r, $dic_subm{$r}, $dic_tree{$r})
-	}
-	close($REVLOG);
-}
-
-open($REVLOG, ">> revs.pl") || die;
-
 # 現在の refs をすべて取得。
 open($F, "git show-ref |") || die;
 while (<$F>) {
@@ -33,12 +19,100 @@ while (<$F>) {
 		$branches{$3}{$2} = $1;
 	} elsif (m=^[0-9a-f]{40}\s+refs/tags/([rt])(\d+)$=) {
 		$tags{$2} .= " $1$2";
-	} elsif (m=^([0-9a-f]{40})\s+refs/heads/$m_master$=) {
+	} elsif (m=^([0-9a-f]{40})\s+refs/heads/(m/[^/]+)$=) {
 		# 各 submodule の最終 commit を得る。
-		$last{'m/master'} = $1;
+		$last{$2} = $1;
 	}
 }
 close($F);
+
+@dt = sort {$a <=> $b} keys %tags;
+if (@dt > 2048) {
+	system('git tag -d ' . join(' ', @tags{@dt[0..$#dt - 1024]})) && die;
+}
+
+########
+
+($hash_subm, $subm, $tree, @revs) = &read_subm_commits($last{'m/master'});
+$hash_tree = '';
+if ($hash_subm ne '') {
+	$hash_tree = $dic_tree{$dic_revs{$hash_subm}};
+}
+
+if (@revs > 0) {
+	&read_revs unless defined %m_revs;
+	&commit_revs($hash_subm, $subm, $hash_tree, $tree, @revs);
+}
+
+exit;	################################################################
+
+sub read_revs {
+	eval "require 'revs.pl'";
+
+	@m_revs = sort {$a <=> $b} keys %dic_subm;
+
+	if (scalar(@m_revs) != scalar(keys %dic_revs)) {
+		open($REVLOG, "> revs.pl") || die;
+		for my $r (@m_revs) {
+			&revlog($REVLOG, $r, $dic_subm{$r}, $dic_tree{$r})
+		}
+		close($REVLOG);
+	}
+
+	open($REVLOG, ">> revs.pl") || die;
+}
+
+sub read_subm_commits {
+	my ($hash) = @_;
+	@revs = ();
+	my $subm;
+	my $tree;
+
+	while (1) {
+		($subm, $tree) = &readtree($hash);
+
+		my $upd = 0;
+		while (my ($repo, $h) = each %repos) {
+			if ($h eq $subm->{$repo}{H}) {
+				print STDERR "$repo=$h (up-to-date)\n" if $verbose;
+				next;
+			}
+			print STDERR "$repo=$subm->{$repo}{H}..$h\n" if $verbose;
+			$commits{$repo} = {};
+			&get_commits2($commits{$repo}, $subm->{$repo}{H}, $h);
+			push(@revs, keys %{$commits{$repo}});
+			$upd++;
+			if ($subm->{$repo}{H} ne '') {
+				$repos{$repo} = $subm->{$repo}{H};
+			}
+		}
+
+		my %t;
+		@t{@revs} = @revs;
+		@revs = sort {$a <=> $b} keys %t;
+
+		last if $upd == 0 || $hash eq '';
+
+		&read_revs unless defined %m_revs;
+
+		if ($revs[0] <= $m_revs[0]) {
+			$hash = '';
+			next;
+		}
+
+		# Great Linear Search
+		$i = $revs[0];
+		while (1) {
+			die "$i <= $m_revs[0]" if $i <= $m_revs[0];
+			next unless defined $dic_subm{--$i};
+			last;
+		}
+		print STDERR "r$i=$dic_subm{$i}\n" if $verbose;
+		$hash = $dic_subm{$i};
+	}
+
+	return ($hash, $subm, $tree, @revs);
+}
 
 sub readtree {
 	my ($commit) = @_;
@@ -57,140 +131,89 @@ sub readtree {
 		$tree->{$repo}{T} = $1;
 	}
 	close($F);
-}
-
-@dt = sort {$a <=> $b} keys %tags;
-if (@dt > 2048) {
-	system('git tag -d ' . join(' ', @tags{@dt[0..$#dt - 1024]})) && die;
-}
-
-$parent = '';
-$parent_subm = '';
-
-@revs = ();
-
-########
-
-while (1) {
-	&readtree($last{'m/master'});
-
-	my $upd = 0;
-	while (my ($repo, $h) = each %repos) {
-		if ($h eq $subm->{$repo}{H}) {
-			print STDERR "$repo=$h (up-to-date)\n" if $verbose;
-			next;
-		}
-		print STDERR "$repo=$subm->{$repo}{H}..$h\n" if $verbose;
-		$commits{$repo} = {};
-		&get_commits2($commits{$repo}, $subm->{$repo}{H}, $h);
-		push(@revs, keys %{$commits{$repo}});
-		$upd++;
-		if ($subm->{$repo}{H} ne '') {
-			$repos{$repo} = $subm->{$repo}{H};
-		}
-	}
-
-	@t{@revs} = @revs;
-	@revs = sort {$a <=> $b} keys %t;
-
-	last if $upd == 0 || $last{'m/master'} eq '';
-
-	if ($revs[0] <= $m_revs[0]) {
-		$last{'m/master'} = '';
-		next;
-	}
-
-	# Great Linear Search
-	$i = $revs[0];
-	while (1) {
-		die "$i <= $m_revs[0]" if $i <= $m_revs[0];
-		next unless defined $dic_subm{--$i};
-		last;
-	}
-	print STDERR "r$i=$dic_subm{$i}\n" if $verbose;
-	$last{'m/master'} = $dic_subm{$i};
-}
-
-$parent_subm = $last{'m/master'};
-if ($parent_subm ne '') {
-	$parent = $dic_tree{$dic_revs{$parent_subm}};
+	return ($subm, $tree);
 }
 
 # 書きだす!
-for my $rev (@revs) {
-	my $msg = '';
-	for my $repo (sort keys %repos) {
-		my $r = $commits{$repo}{$rev};
-		next unless defined $r;
-		while (my ($k, $v) = each %$r) {
-			if ($k =~ /^GIT_/) {
-				$ENV{$k} = $v;
-			} elsif ($k eq 'MSG') {
-				die unless ($msg eq '' || $msg eq $v);
-				$msg = $v;
-			}
-		}
-		&update_gitmodules($subm, $repo) if (!defined $subm->{$repo}{H});
-		$tree->{$repo}{T} = $r->{tree};
-		$subm->{$repo}{H} = $r->{commit};
-	}
-
-	# Subtree
-	$parent = &make_commit($tree, $msg, $parent);
-	print STDERR "t $parent $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
-
-	$parent_subm = &make_commit($subm, $msg, $parent_subm);
-	print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
-
-	&revlog($REVLOG, $rev, $parent_subm, $parent);
-
-	if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
-		system("git update-ref refs/tags/t$rev $parent") && die;
-		system("git update-ref refs/heads/t/master $parent") && die;
-		system("git update-ref refs/tags/r$rev $parent_subm") && die;
-		system("git update-ref refs/heads/m/master $parent_subm") && die;
-	}
-
-	if ($json) {
-		my %js = (branch=>'master',
-			   project=>'llvm-project');
-		$js{'revision'} = "r$rev";
-		$js{'repository'} = 'git://github.com/chapuni/llvm-project';
-		$ENV{GIT_AUTHOR_DATE} =~ /^(\d+)/;
-		$js{'when'} = $1;
-		$js{'who'} = sprintf("%s <%s>",
-							 $ENV{GIT_AUTHOR_NAME},
-							 $ENV{GIT_AUTHOR_EMAIL});
-		$js{'comments'} = $msg;
-
-		open(my $df, "git diff-tree --numstat $parent |");
-		$js{'files'} = '['.join(',',join(',', grep(s=^\d+\s+\d+\s+(.*)\r*\n*$=\"\1\"=, <$df>))).']';
-		close($df);
-
-		for (keys %js) {
-			my @a = split(//, $js{$_});
-			for (@a) {
-				if ($_ eq ' ') {
-					$_ = '+';
-				} elsif (/^\r*\n$/) {
-					$_ = '%0A';
-				} elsif (/^[-0-9A-Z_a-z]$/) {
-				} else {
-					$_ = sprintf('%%%02X', ord);
+sub commit_revs {
+	my ($parent_subm, $subm, $parent, $tree, @revs) = @_;
+	
+	for my $rev (@revs) {
+		my $msg = '';
+		for my $repo (sort keys %repos) {
+			my $r = $commits{$repo}{$rev};
+			next unless defined $r;
+			while (my ($k, $v) = each %$r) {
+				if ($k =~ /^GIT_/) {
+					$ENV{$k} = $v;
+				} elsif ($k eq 'MSG') {
+					die unless ($msg eq '' || $msg eq $v);
+					$msg = $v;
 				}
 			}
-			$js{$_} = join('', @a);
+			&update_gitmodules($subm, $repo) if (!defined $subm->{$repo}{H});
+			$tree->{$repo}{T} = $r->{tree};
+			$subm->{$repo}{H} = $r->{commit};
 		}
-		open(my $fj, "> _.bak") || die;
-		print $fj join('&', map {"$_=$js{$_}"} sort keys %js);
-		close($fj);
-		system('wget http://bb.pgr.jp/change_hook/base --post-file=_.bak');
+
+		# Subtree
+		$parent = &make_commit($tree, $msg, $parent);
+		print STDERR "t $parent $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+
+		$parent_subm = &make_commit($subm, $msg, $parent_subm);
+		print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+
+		&revlog($REVLOG, $rev, $parent_subm, $parent);
+
+		if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
+			system("git update-ref refs/tags/t$rev $parent") && die;
+			system("git update-ref refs/heads/t/master $parent") && die;
+			system("git update-ref refs/tags/r$rev $parent_subm") && die;
+			system("git update-ref refs/heads/m/master $parent_subm") && die;
+		}
+
+		&json($rev, $msg, $parent);
 	}
 }
 
-close($REVLOG);
+sub json {
+	my ($rev, $msg, $hash_tree) = @_;
+	my %js = (branch=>'master',
+			  project=>'llvm-project');
+	$js{'revision'} = "r$rev";
+	$js{'repository'} = 'git://github.com/chapuni/llvm-project';
+	$ENV{GIT_AUTHOR_DATE} =~ /^(\d+)/;
+	$js{'when'} = $1;
+	$js{'who'} = sprintf("%s <%s>",
+						 $ENV{GIT_AUTHOR_NAME},
+						 $ENV{GIT_AUTHOR_EMAIL});
+	$js{'comments'} = $msg;
 
-exit;
+	open(my $df, "git diff-tree --numstat $hash_tree |");
+	$js{'files'} = '['.join(',',join(',', grep(s=^\d+\s+\d+\s+(.*)\r*\n*$=\"\1\"=, <$df>))).']';
+	close($df);
+
+	for (sort keys %js) {
+		print STDERR "$_=<$js{$_}>\n" if $verbose;
+		my @a = split(//, $js{$_});
+		for (@a) {
+			if ($_ eq ' ') {
+				$_ = '+';
+			} elsif (/^\r*\n$/) {
+				$_ = '%0A';
+			} elsif (/^[-0-9A-Z_a-z]$/) {
+			} else {
+				$_ = sprintf('%%%02X', ord);
+			}
+		}
+		$js{$_} = join('', @a);
+	}
+	open(my $fj, "> _.bak") || die;
+	print $fj join('&', map {"$_=$js{$_}"} sort keys %js);
+	close($fj);
+	system('wget http://bb.pgr.jp/change_hook/base --post-file=_.bak')
+		if $json;
+}
 
 sub revlog {
 	my ($REVLOG, $rev, $subm, $subt) = @_;
