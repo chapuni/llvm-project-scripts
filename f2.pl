@@ -16,7 +16,7 @@ eval "require 'revs.pl'";
 if (scalar(@m_revs) != scalar(keys %dic_revs)) {
 	open($REVLOG, "> revs.pl") || die;
 	for my $r (@m_revs) {
-		print $REVLOG "\$dic_subm{$r}=\$s='$dic_subm{$r}';\$dic_tree{$r}=\$t='$dic_tree{$r}';\$dic_revs{\$s}=\$dic_revs{\$t}=$r;\n";
+		&revlog($REVLOG, $r, $dic_subm{$r}, $dic_tree{$r})
 	}
 	close($REVLOG);
 }
@@ -142,9 +142,7 @@ for my $rev (@revs) {
 	$parent_subm = &make_commit($subm, $msg, $parent_subm);
 	print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 
-	print $REVLOG "\$dic_subm{$rev}=\$s='$parent_subm';";
-	print $REVLOG "\$dic_tree{$rev}=\$t='$parent';";
-	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=$rev;\n";
+	&revlog($REVLOG, $rev, $parent_subm, $parent);
 
 	if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
 		system("git update-ref refs/tags/t$rev $parent") && die;
@@ -193,6 +191,13 @@ for my $rev (@revs) {
 close($REVLOG);
 
 exit;
+
+sub revlog {
+	my ($REVLOG, $rev, $subm, $subt) = @_;
+	print $REVLOG "\$dic_subm{$rev}=\$s='$subm';";
+	print $REVLOG "\$dic_tree{$rev}=\$t='$subt';";
+	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=$rev;\n";
+}
 
 sub update_gitmodules {
 	my ($subm, $repo) = @_;
