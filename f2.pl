@@ -15,8 +15,10 @@ while (<$F>) {
 	chomp;
 	if (m=^([0-9a-f]{40})\s+refs/remotes/llvm.org/([^/]+)/master$=) {
 		$repos{$2} = $1;
-	} elsif (m=^([0-9a-f]{40})\s+refs/remotes/llvm.org/([^/]+)/(\S+)$=) {
+		$branches{'master'}{$2} = $1;
+	} elsif (m=^([0-9a-f]{40})\s+refs/remotes/llvm.org/([^/]+)/([^/]+)$=) {
 		$branches{$3}{$2} = $1;
+		push(@branch_names, $3);
 	} elsif (m=^[0-9a-f]{40}\s+refs/tags/([rt])(\d+)$=) {
 		$tags{$2} .= " $1$2";
 	} elsif (m=^([0-9a-f]{40})\s+refs/heads/(m/[^/]+)$=) {
@@ -33,20 +35,40 @@ if (@dt > 2048) {
 
 ########
 
-($hash_subm, $subm, $tree, @revs) = &read_subm_commits($last{'m/master'});
+($hash_subm, $subm, $tree, @revs) = &read_subm_commits($last{'m/master'}, 'master');
 $hash_tree = '';
 if ($hash_subm ne '') {
 	$hash_tree = $dic_tree{$dic_revs{$hash_subm}};
 }
 
 if (@revs > 0) {
-	&read_revs unless defined %m_revs;
-	&commit_revs($hash_subm, $subm, $hash_tree, $tree, @revs);
+	&read_revs;
+	&commit_revs('master', $hash_subm, $subm, $hash_tree, $tree, @revs);
+}
+
+$os = $subm;
+
+@branch_names = qw(release_30);
+
+for $branch (@branch_names) {
+	print STDERR "**** Branch: $branch ****\n" if $verbose;
+	($hash_subm, $subm, $tree, @revs) = &read_subm_commits($last{"m/$branch"}, $branch, $os);
+	$hash_tree = '';
+	if ($hash_subm ne '') {
+		$hash_tree = $dic_tree{$dic_revs{$hash_subm}};
+	}
+
+	if (@revs > 0) {
+		&read_revs;
+		&commit_revs($branch, $hash_subm, $subm, $hash_tree, $tree, @revs);
+	}
 }
 
 exit;	################################################################
 
 sub read_revs {
+	return if defined %m_revs;
+
 	eval "require 'revs.pl'";
 
 	@m_revs = sort {$a <=> $b} keys %dic_subm;
@@ -63,7 +85,7 @@ sub read_revs {
 }
 
 sub read_subm_commits {
-	my ($hash) = @_;
+	my ($hash, $branch, $base) = @_;
 	@revs = ();
 	my $subm;
 	my $tree;
@@ -72,19 +94,25 @@ sub read_subm_commits {
 		($subm, $tree) = &readtree($hash);
 
 		my $upd = 0;
-		while (my ($repo, $h) = each %repos) {
+		while (my ($repo, $h) = each %{$branches{$branch}}) {
 			if ($h eq $subm->{$repo}{H}) {
 				print STDERR "$repo=$h (up-to-date)\n" if $verbose;
 				next;
 			}
-			print STDERR "$repo=$subm->{$repo}{H}..$h\n" if $verbose;
-			$commits{$repo} = {};
-			&get_commits2($commits{$repo}, $subm->{$repo}{H}, $h);
+			if ($subm->{$repo}{H} ne '') {
+				print STDERR "$repo=$subm->{$repo}{H}..$h\n" if $verbose;
+				$commits{$repo} = {};
+				&get_commits2($commits{$repo}, $subm->{$repo}{H}, $h);
+				$branches{$branch}{$repo} = $subm->{$repo}{H};
+			} else {
+				print STDERR "$repo=$base->{$repo}{H}..$h\n" if $verbose;
+				$commits{$repo} = {};
+				&get_commits2($commits{$repo}, $base->{$repo}{H}, $h);
+				die unless ($base->{$repo}{H} ne '');
+				$branches{$branch}{$repo} = $base->{$repo}{H};
+			}
 			push(@revs, keys %{$commits{$repo}});
 			$upd++;
-			if ($subm->{$repo}{H} ne '') {
-				$repos{$repo} = $subm->{$repo}{H};
-			}
 		}
 
 		my %t;
@@ -93,22 +121,21 @@ sub read_subm_commits {
 
 		last if $upd == 0 || $hash eq '';
 
-		&read_revs unless defined %m_revs;
+		&read_revs;
 
+		# 得るべき revision が既知のものより古い場合は作り直し。
 		if ($revs[0] <= $m_revs[0]) {
 			$hash = '';
 			next;
 		}
 
 		# Great Linear Search
-		$i = $revs[0];
-		while (1) {
-			die "$i <= $m_revs[0]" if $i <= $m_revs[0];
-			next unless defined $dic_subm{--$i};
-			last;
+		die if $hash eq '';
+		die $hash unless defined $dic_revs{$hash};
+		while ($dic_revs{$hash} >= $revs[0]) {
+			$hash = &sb_hash("git rev-list --no-walk --first-parent $hash^");
+			die unless defined $dic_revs{$hash};
 		}
-		print STDERR "r$i=$dic_subm{$i}\n" if $verbose;
-		$hash = $dic_subm{$i};
 	}
 
 	return ($hash, $subm, $tree, @revs);
@@ -136,11 +163,15 @@ sub readtree {
 
 # 書きだす!
 sub commit_revs {
-	my ($parent_subm, $subm, $parent, $tree, @revs) = @_;
+	my ($branch, $parent_subm, $subm, $parent, $tree, @revs) = @_;
 	
 	for my $rev (@revs) {
 		my $msg = '';
-		for my $repo (sort keys %repos) {
+		my @mergebase_subm = ();
+		my @mergebase_tree = ();
+		push(@mergebase_subm, $parent_subm) if $parent_subm ne '';
+		push(@mergebase_tree, $parent) if $parent ne '';
+		for my $repo (sort keys %{$branches{$branch}}) {
 			my $r = $commits{$repo}{$rev};
 			next unless defined $r;
 			while (my ($k, $v) = each %$r) {
@@ -151,34 +182,48 @@ sub commit_revs {
 					$msg = $v;
 				}
 			}
-			&update_gitmodules($subm, $repo) if (!defined $subm->{$repo}{H});
+			if (!defined $subm->{$repo}{H}) {
+				&update_gitmodules($subm, $repo);
+
+				# branch 始点の場合。
+				if (defined $r->{parent}) {
+					my $p = {};
+					&get_commits2($p, "$r->{parent}^", $r->{parent});
+					my @pr = keys %$p;
+					die unless @pr == 1;
+					die unless defined $dic_subm{$pr[0]};
+					die unless defined $dic_tree{$pr[0]};
+					push(@mergebase_subm, $dic_subm{$pr[0]});
+					push(@mergebase_tree, $dic_tree{$pr[0]});
+				}
+			}
 			$tree->{$repo}{T} = $r->{tree};
 			$subm->{$repo}{H} = $r->{commit};
 		}
 
 		# Subtree
-		$parent = &make_commit($tree, $msg, $parent);
+		$parent = &make_commit($tree, $msg, @mergebase_tree);
 		print STDERR "t $parent $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 
-		$parent_subm = &make_commit($subm, $msg, $parent_subm);
+		$parent_subm = &make_commit($subm, $msg, @mergebase_subm);
 		print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 
 		&revlog($REVLOG, $rev, $parent_subm, $parent);
 
 		if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
 			system("git update-ref refs/tags/t$rev $parent") && die;
-			system("git update-ref refs/heads/t/master $parent") && die;
+			system("git update-ref refs/heads/t/$branch $parent") && die;
 			system("git update-ref refs/tags/r$rev $parent_subm") && die;
-			system("git update-ref refs/heads/m/master $parent_subm") && die;
+			system("git update-ref refs/heads/m/$branch $parent_subm") && die;
 		}
 
-		&json($rev, $msg, $parent);
+		&json($branch, $rev, $msg, $parent);
 	}
 }
 
 sub json {
-	my ($rev, $msg, $hash_tree) = @_;
-	my %js = (branch=>'master',
+	my ($branch, $rev, $msg, $hash_tree) = @_;
+	my %js = (branch=>$branch,
 			  project=>'llvm-project');
 	$js{'revision'} = "r$rev";
 	$js{'repository'} = 'git://github.com/chapuni/llvm-project';
@@ -194,7 +239,7 @@ sub json {
 	close($df);
 
 	for (sort keys %js) {
-		print STDERR "$_=<$js{$_}>\n" if $verbose;
+		#print STDERR "$_=<$js{$_}>\n" if $verbose;
 		my @a = split(//, $js{$_});
 		for (@a) {
 			if ($_ eq ' ') {
@@ -235,7 +280,7 @@ sub update_gitmodules {
 }
 
 sub make_commit {
-	my ($tree, $msg, $parent) = @_;
+	my ($tree, $msg, @parents) = @_;
 	my $mktree = sub {
 		my ($F) = @_;
 		for my $repo (sort keys %$tree) {
@@ -251,9 +296,7 @@ sub make_commit {
 	my @tree = &subprocess("git mktree", $mktree);
 	my $tree_hash = shift @tree;
 	chomp $tree_hash;
-	if ($parent ne '') {
-		$parent = "-p $parent";
-	}
+	my $parent = join(' ', map{"-p ".$_} @parents);
 	return &sb_hash("git commit-tree $tree_hash $parent", $msg);
 }
 
