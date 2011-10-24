@@ -67,7 +67,7 @@ for $branch (@branch_names) {
 exit;	################################################################
 
 sub read_revs {
-	return if defined %m_revs;
+	return if $REVLOG;
 
 	eval "require 'revs.pl'";
 
