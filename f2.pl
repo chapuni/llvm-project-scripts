@@ -175,6 +175,7 @@ sub commit_revs {
 		my $msg = '';
 		my @mergebase_subm = ();
 		my @mergebase_tree = ();
+		my $f_gitmodules = 0;
 		push(@mergebase_subm, $parent_subm) if $parent_subm ne '';
 		push(@mergebase_tree, $parent) if $parent ne '';
 		for my $repo (sort keys %{$branches{$branch}}) {
@@ -189,7 +190,7 @@ sub commit_revs {
 				}
 			}
 			if (!defined $subm->{$repo}{H}) {
-				&update_gitmodules($subm, $repo);
+				$f_gitmodules++;
 
 				# branch 始点の場合。
 				if (defined $r->{parent}) {
@@ -205,6 +206,14 @@ sub commit_revs {
 			}
 			$tree->{$repo}{T} = $r->{tree};
 			$subm->{$repo}{H} = $r->{commit};
+		}
+
+		if ($f_gitmodules) {
+			my @repos = ();
+			for my $repo (keys %$subm) {
+				push(@repos, $repo) if exists $subm->{$repo}{H};
+			}
+			&update_gitmodules($subm, @repos);
 		}
 
 		# Subtree
@@ -274,14 +283,15 @@ sub revlog {
 }
 
 sub update_gitmodules {
-	my ($subm, $repo) = @_;
+	my $subm = shift @_;
 	my $gm = $subm->{'.gitmodules'};
-	$gm->{blob} =`git cat-file blob $gm->{B}`
-		if ($gm->{blob} eq '' && $gm->{B} ne '');
-	$gm->{blob} .= "[submodule \"$repo\"]\n";
-	$gm->{blob} .= "\tpath = $repo\n";
-	$gm->{blob} .= "\turl = http://llvm.org/git/$repo.git\n";
-	$gm->{B} = &sb_hash("git hash-object -w --stdin", $gm->{blob});
+	my $blob = '';
+	for my $repo (sort @_) {
+		$blob .= "[submodule \"$repo\"]\n";
+		$blob .= "\tpath = $repo\n";
+		$blob .= "\turl = http://llvm.org/git/$repo.git\n";
+	}
+	$gm->{B} = &sb_hash("git hash-object -w --stdin", $blob);
 	$subm->{'.gitmodules'} = $gm;
 }
 
