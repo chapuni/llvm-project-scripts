@@ -277,9 +277,10 @@ sub json {
 
 sub revlog {
 	my ($REVLOG, $rev, $subm, $subt) = @_;
-	print $REVLOG "\$dic_subm{$rev}=\$s='$subm';";
-	print $REVLOG "\$dic_tree{$rev}=\$t='$subt';";
-	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=$rev;\n";
+	print $REVLOG "\$r=$rev;";
+	print $REVLOG "\$dic_subm{\$r}=\$s='$subm';";
+	print $REVLOG "\$dic_tree{\$r}=\$t='$subt';";
+	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=\$r;\n";
 }
 
 sub update_gitmodules {
