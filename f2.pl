@@ -36,6 +36,7 @@ if (@dt > 2048) {
 ########
 
 ($hash_subm, $subm, $tree, @revs) = &read_subm_commits($last{'m/master'}, 'master');
+
 $hash_tree = '';
 if ($hash_subm ne '') {
 	$hash_tree = $dic_tree{$dic_revs{$hash_subm}};
@@ -108,7 +109,7 @@ sub read_subm_commits {
 				print STDERR "$repo=$base->{$repo}{H}..$h\n" if $verbose;
 				$commits{$repo} = {};
 				&get_commits2($commits{$repo}, $base->{$repo}{H}, $h);
-				die unless ($base->{$repo}{H} ne '');
+				#die unless ($base->{$repo}{H} ne '');
 				$branches{$branch}{$repo} = $base->{$repo}{H};
 			}
 			push(@revs, keys %{$commits{$repo}});
@@ -125,13 +126,18 @@ sub read_subm_commits {
 
 		# 得るべき revision が既知のものより古い場合は作り直し。
 		if ($revs[0] <= $m_revs[0]) {
+			die if $hash eq '';
 			$hash = '';
+			print STDERR "$revs[0] <= $m_revs[0]: Remake entirely!\n"
+				if $verbose;
 			next;
 		}
 
 		# Great Linear Search
 		die if $hash eq '';
 		die $hash unless defined $dic_revs{$hash};
+		print STDERR "Seeking around $revs[0] from $dic_revs{$hash}\n"
+			if $verbose;
 		while ($dic_revs{$hash} >= $revs[0]) {
 			$hash = &sb_hash("git rev-list --no-walk --first-parent $hash^");
 			die unless defined $dic_revs{$hash};
