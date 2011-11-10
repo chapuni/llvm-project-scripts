@@ -309,15 +309,20 @@ sub revlog {
 	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=\$r;\n";
 }
 
-sub update_gitmodules {
-	my $subm = shift @_;
-	my $gm = $subm->{'.gitmodules'};
+sub make_gitmodules {
 	my $blob = '';
 	for my $repo (sort @_) {
 		$blob .= "[submodule \"$repo\"]\n";
 		$blob .= "\tpath = $repo\n";
 		$blob .= "\turl = http://llvm.org/git/$repo.git\n";
 	}
+	return $blob;
+}
+
+sub update_gitmodules {
+	my $subm = shift @_;
+	my $gm = $subm->{'.gitmodules'};
+	my $blob = &make_gitmodules(@_);
 	$gm->{B} = &sb_hash("git hash-object -w --stdin", $blob);
 	$subm->{'.gitmodules'} = $gm;
 }
