@@ -120,7 +120,16 @@ sub read_subm_commits {
 		@t{@revs} = @revs;
 		@revs = sort {$a <=> $b} keys %t;
 
-		last if $upd == 0 || $hash eq '';
+		if ($hash eq '') {
+			print STDERR "Non-existent branch. Remake.\n"
+				if $verbose;
+			last;
+		}
+
+		if ($upd == 0) {
+			# Up-to-date.
+			last;
+		}
 
 		&read_revs;
 
