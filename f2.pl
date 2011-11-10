@@ -209,8 +209,8 @@ sub commit_revs {
 			if (!defined $subm->{$repo}{H}) {
 				$f_gitmodules++;
 
-				# branch 始点の場合。
 				if (defined $r->{parent}) {
+					# branch 始点の場合。
 					my $p = {};
 					&get_commits2($p, "$r->{parent}^", $r->{parent});
 					my @pr = keys %$p;
@@ -223,6 +223,12 @@ sub commit_revs {
 			}
 			if ($r->{tree} ne '4b825dc642cb6eb9a060e54bf8d69288fbee4904') {
 				# empty tree は扱えない人が多いので無視する。
+				if (!exists $tree->{$repo}{T} && $branch eq 'master') {
+					# 新規に現れたモジュールの場合。
+					# tree の方だけ subtree-merge 対策として 元の commit を親にする。
+					# ただし意図的に root くっつけは master に限っておく。
+					push(@mergebase_tree, $r->{commit});
+				}
 				$tree->{$repo}{T} = $r->{tree};
 			}
 			$subm->{$repo}{H} = $r->{commit};
