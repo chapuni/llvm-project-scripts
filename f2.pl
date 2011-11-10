@@ -147,9 +147,17 @@ sub read_subm_commits {
 		die $hash unless defined $dic_revs{$hash};
 		print STDERR "Seeking around $revs[0] from $dic_revs{$hash}\n"
 			if $verbose;
-		while ($dic_revs{$hash} >= $revs[0]) {
-			$hash = &sb_hash("git rev-list --no-walk --first-parent $hash^");
-			die unless defined $dic_revs{$hash};
+		my $ri = $revs[0];
+		while (1) {
+			$ri--;
+			die unless $ri >= 1;
+			next if (!exists $dic_subm{$ri});
+			if ($dic_subm{$ri} eq &sb_hash("git merge-base $hash $dic_subm{$ri}")) {
+				$hash = $dic_subm{$ri};
+				print STDERR "Found $ri $hash\n"
+					if $verbose;
+				last;
+			}
 		}
 	}
 
