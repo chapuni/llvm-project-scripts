@@ -422,7 +422,7 @@ sub parse_commit {
 		}
 	}
 	while ($_ = shift @_) {
-		if (/git-svn-id:\s+\S+@(\d+)/) {
+		if (/git-svn-id:\s+\S+@(\d+)\s+\d+/) {
 			$r{REV} = $1;
 			last;
 		} elsif (/^\s\s\s\s(.*)/) {
