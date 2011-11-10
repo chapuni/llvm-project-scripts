@@ -160,7 +160,7 @@ sub readtree {
 	my ($commit) = @_;
 	$tree = {};
 	$subm = {};
-	return if $commit eq '';
+	return ($subm, $tree) if $commit eq '';
 	open(my $F, "git ls-tree $commit |") || die;
 	while (<$F>) {
 		if (/^100644 blob ([0-9a-f]{40})\s+\.gitmodules$/) {
