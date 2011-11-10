@@ -3,6 +3,7 @@
 use FileHandle;
 use IPC::Open2;
 
+$import++ if grep(/IMPORT/, @ARGV);
 $verbose++ if grep(/VERBOSE/, @ARGV);
 $json++ if grep(/JSON/, @ARGV);
 
@@ -187,7 +188,13 @@ sub readtree {
 # 書きだす!
 sub commit_revs {
 	my ($branch, $parent_subm, $subm, $parent, $tree, @revs) = @_;
-	
+	my $F;
+	my $mark = 1;
+
+	if ($import) {
+		open($F, "| git fast-import --force --export-marks=marks.txt") || die;
+	}
+
 	for my $rev (@revs) {
 		my $msg = '';
 		my @mergebase_subm = ();
@@ -239,26 +246,64 @@ sub commit_revs {
 			for my $repo (keys %$subm) {
 				push(@repos, $repo) if exists $subm->{$repo}{H};
 			}
-			&update_gitmodules($subm, @repos);
+			if ($import){
+			my $blob = &make_gitmodules(@repos);
+			printf $F ("blob\nmark :%d\ndata %d\n%s\n",
+				   $mark,
+				   length($blob),
+				   $blob);
+			$subm->{'.gitmodules'}{B} = ':' . $mark++;
+			} else {
+				&update_gitmodules($subm, @repos);
+			}
 		}
 
-		# Subtree
-		$parent = &make_commit($tree, $msg, @mergebase_tree);
-		print STDERR "t $parent $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+		if ($import) {
+			die if $json;
 
-		$parent_subm = &make_commit($subm, $msg, @mergebase_subm);
-		print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+			&export_commit($F, $mark, "refs/heads/t/$branch", $tree, $msg, @mergebase_tree);
+			$trevs{$mark} = $rev;
+			$parent = ':' . $mark++;
 
-		&revlog($REVLOG, $rev, $parent_subm, $parent);
+			&export_commit($F, $mark, "refs/heads/m/$branch", $subm, $msg, @mergebase_subm);
+			$srevs{$mark} = $rev;
+			$parent_subm = ':' . $mark++;
+			print STDERR "[$parent - $parent_subm] $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+		} else {
+			$parent = &make_commit($tree, $msg, @mergebase_tree);
+			print STDERR "t $parent $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 
-		if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
-			system("git update-ref refs/tags/t$rev $parent") && die;
-			system("git update-ref refs/heads/t/$branch $parent") && die;
-			system("git update-ref refs/tags/r$rev $parent_subm") && die;
-			system("git update-ref refs/heads/m/$branch $parent_subm") && die;
+			$parent_subm = &make_commit($subm, $msg, @mergebase_subm);
+			print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
+
+			&revlog($REVLOG, $rev, $parent_subm, $parent);
+
+			if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
+				system("git update-ref refs/tags/t$rev $parent") && die;
+				system("git update-ref refs/heads/t/$branch $parent") && die;
+				system("git update-ref refs/tags/r$rev $parent_subm") && die;
+				system("git update-ref refs/heads/m/$branch $parent_subm") && die;
+			}
+
+			&json($branch, $rev, $msg, $parent);
 		}
+	}
 
-		&json($branch, $rev, $msg, $parent);
+	if ($import) {
+		close($F);
+
+		# mark からリビジョン情報を再構成する
+		open($F, "marks.txt") || die;
+		while (<$F>) {
+			next unless /^:(\d+)\s+([0-9a-f]{40})/;
+			if ($trevs{$1} > '') {
+				print $REVLOG "\$r=$trevs{$1};\$dic_tree{\$r}=\$t='$2';\$dic_revs{\$t}=\$r;\n";
+			}
+			if ($srevs{$1} > '') {
+				print $REVLOG "\$r=$srevs{$1};\$dic_subm{\$r}=\$s='$2';\$dic_revs{\$s}=\$r;\n";
+			}
+		}
+		close($F);
 	}
 }
 
@@ -307,6 +352,33 @@ sub revlog {
 	print $REVLOG "\$dic_subm{\$r}=\$s='$subm';";
 	print $REVLOG "\$dic_tree{\$r}=\$t='$subt';";
 	print $REVLOG "\$dic_revs{\$s}=\$dic_revs{\$t}=\$r;\n";
+}
+
+sub export_commit {
+	my ($F, $mark, $branch, $tree, $msg, @parents) = @_;
+
+	printf $F ("commit %s\nmark :%d\nauthor %s <%s> %s\ncommitter %s <%s> %s\ndata %d\n%s",
+			   $branch, $mark,
+			   @ENV{qw(GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE)},
+			   @ENV{qw(GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE)},
+			   length($msg), $msg);
+	printf$F ("from %s\n", shift @parents) if @parents > 0;
+	for my $p (@parents) {
+		printf $F ("merge %s\n", $p);
+	}
+
+	print $F "deleteall\n";
+
+	for my $repo (sort keys %$tree) {
+		if ($tree->{$repo}{B} ne '') {
+			print $F "M 100644 $tree->{$repo}{B} $repo\n";
+		} elsif ($tree->{$repo}{T} ne '') {
+			print $F "M 040000 $tree->{$repo}{T} $repo\n";
+		} elsif ($tree->{$repo}{H} ne '') {
+			print $F "M 160000 $tree->{$repo}{H} $repo\n";
+		}
+	}
+	print $F "\n";
 }
 
 sub make_gitmodules {
