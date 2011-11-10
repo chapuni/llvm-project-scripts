@@ -327,7 +327,7 @@ sub make_commit {
 			}
 		}
 	};
-	my @tree = &subprocess("git mktree", $mktree);
+	my @tree = &subprocess("git mktree --missing", $mktree);
 	my $tree_hash = shift @tree;
 	chomp $tree_hash;
 	my $parent = join(' ', map{"-p ".$_} @parents);
