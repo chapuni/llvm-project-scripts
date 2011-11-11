@@ -221,7 +221,10 @@ sub commit_revs {
 					push(@mergebase_tree, $dic_tree{$pr[0]});
 				}
 			}
-			$tree->{$repo}{T} = $r->{tree};
+			if ($r->{tree} ne '4b825dc642cb6eb9a060e54bf8d69288fbee4904') {
+				# empty tree は扱えない人が多いので無視する。
+				$tree->{$repo}{T} = $r->{tree};
+			}
 			$subm->{$repo}{H} = $r->{commit};
 		}
 
