@@ -25,6 +25,8 @@ while (<$F>) {
 	} elsif (m=^([0-9a-f]{40})\s+refs/heads/(m/[^/]+)$=) {
 		# 各 submodule の最終 commit を得る。
 		$last{$2} = $1;
+	} elsif (m=^[0-9a-f]{40}\s+refs/notes/([mt]/[^/]+)$=) {
+		$noterefs{$1}++;
 	}
 }
 close($F);
@@ -190,6 +192,9 @@ sub commit_revs {
 	my ($branch, $parent_subm, $subm, $parent, $tree, @revs) = @_;
 	my $F;
 	my $mark = 1;
+	my %notes = ();
+	my %trevs = ();
+	my %srevs = ();
 
 	if ($import) {
 		open($F, "| git fast-import --force --export-marks=marks.txt") || die;
@@ -258,8 +263,14 @@ sub commit_revs {
 			}
 		}
 
+		my $note = sprintf("git-svn-rev: %d\n", $rev);
+
 		if ($import) {
 			die if $json;
+
+			# note blob
+			printf $F ("blob\nmark :%d\ndata %d\n%s\n", $mark, length($note), $note);
+			$notes{$rev} = $mark++;
 
 			&export_commit($F, $mark, "refs/heads/t/$branch", $tree, $msg, @mergebase_tree);
 			$trevs{$mark} = $rev;
@@ -268,6 +279,7 @@ sub commit_revs {
 			&export_commit($F, $mark, "refs/heads/m/$branch", $subm, $msg, @mergebase_subm);
 			$srevs{$mark} = $rev;
 			$parent_subm = ':' . $mark++;
+
 			print STDERR "[$parent - $parent_subm] $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 		} else {
 			$parent = &make_commit($tree, $msg, @mergebase_tree);
@@ -290,6 +302,10 @@ sub commit_revs {
 	}
 
 	if ($import) {
+		# Notes を書き出す
+		&export_notes($F, "m/llvm-project-git-svn", \%notes, \%srevs);
+		&export_notes($F, "t/llvm-project-git-svn", \%notes, \%trevs);
+
 		close($F);
 
 		# mark からリビジョン情報を再構成する
@@ -302,6 +318,7 @@ sub commit_revs {
 			if ($srevs{$1} > '') {
 				print $REVLOG "\$r=$srevs{$1};\$dic_subm{\$r}=\$s='$2';\$dic_revs{\$s}=\$r;\n";
 			}
+
 		}
 		close($F);
 	}
@@ -377,6 +394,22 @@ sub export_commit {
 		} elsif ($tree->{$repo}{H} ne '') {
 			print $F "M 160000 $tree->{$repo}{H} $repo\n";
 		}
+	}
+	print $F "\n";
+}
+
+sub export_notes {
+	my ($F, $ref, $notes, $revs) = @_;
+	my @a = sort {$a <=> $b} keys %$notes;
+	my $msg = sprintf("Add %d commits (r%d - r%d)\n",
+					  scalar(@a), $a[0], $a[$#a]);
+	printf $F ("commit refs/notes/%s\ncommitter NAKAMURA Takumi <geekcivic\@gmail.com> %d +0900\ndata %d\n%s",
+			   $ref,
+			   time(),
+			   length($msg), $msg);
+	printf $F ("from refs/notes/%s^0\n", $ref) if $noterefs{$ref}++;
+	for (sort {$a <=> $b} keys %$revs) {
+		printf $F ("N :%d :%d\n", $notes->{$revs->{$_}}, $_);
 	}
 	print $F "\n";
 }
