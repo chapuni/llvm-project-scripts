@@ -291,9 +291,9 @@ sub commit_revs {
 			&revlog($REVLOG, $rev, $parent_subm, $parent);
 
 			if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
-				system("git update-ref refs/tags/t$rev $parent") && die;
+				system("git update-ref refs/tags/t/r$rev $parent") && die;
 				system("git update-ref refs/heads/t/$branch $parent") && die;
-				system("git update-ref refs/tags/r$rev $parent_subm") && die;
+				system("git update-ref refs/tags/m/r$rev $parent_subm") && die;
 				system("git update-ref refs/heads/m/$branch $parent_subm") && die;
 			}
 
