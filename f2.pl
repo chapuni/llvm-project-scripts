@@ -290,6 +290,9 @@ sub commit_revs {
 			$parent_subm = &make_commit($subm, $msg, @mergebase_subm);
 			print STDERR "m $parent_subm $rev $ENV{GIT_AUTHOR_NAME}\n" if $verbose;
 
+			system("git notes --ref refs/notes/t/llvm-project-git-svn append -m'git-svn-rev: $rev' $parent") && die;
+			system("git notes --ref refs/notes/m/llvm-project-git-svn append -m'git-svn-rev: $rev' $parent_subm") && die;
+
 			&revlog($REVLOG, $rev, $parent_subm, $parent);
 
 			if ((++$nrevs & 255) == 0 || $rev >= $revs[$#revs - 100]) {
