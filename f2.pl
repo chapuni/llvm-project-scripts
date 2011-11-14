@@ -31,6 +31,8 @@ while (<$F>) {
 }
 close($F);
 
+&set_myname;
+
 @dt = sort {$a <=> $b} keys %tags;
 if (@dt > 2048) {
 	system('git tag -d ' . join(' ', @tags{@dt[0..$#dt - 1024]})) && die;
@@ -400,18 +402,31 @@ sub export_commit {
 
 sub export_notes {
 	my ($F, $ref, $notes, $revs) = @_;
+
 	my @a = sort {$a <=> $b} keys %$notes;
 	my $msg = sprintf("Add %d commits (r%d - r%d)\n",
 					  scalar(@a), $a[0], $a[$#a]);
-	printf $F ("commit refs/notes/%s\ncommitter NAKAMURA Takumi <geekcivic\@gmail.com> %d +0900\ndata %d\n%s",
+	printf $F ("commit refs/notes/%s\ncommitter %s\ndata %d\n%s",
 			   $ref,
-			   time(),
+			   $ENV{GIT_COMMITTER_IDENT},
 			   length($msg), $msg);
 	printf $F ("from refs/notes/%s^0\n", $ref) if $noterefs{$ref}++;
 	for (sort {$a <=> $b} keys %$revs) {
 		printf $F ("N :%d :%d\n", $notes->{$revs->{$_}}, $_);
 	}
 	print $F "\n";
+}
+
+sub set_myname {
+	open(my $F, "git var -l |") || die;
+	while (<$F>) {
+		chomp;
+		if (/^(GIT_\w+_IDENT)=(.*)$/) {
+			$ENV{$1} = $2;
+		}
+	}
+	close($F);
+	die if $ENV{GIT_COMMITTER_IDENT} eq '';
 }
 
 sub make_gitmodules {
