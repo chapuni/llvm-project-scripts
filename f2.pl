@@ -54,7 +54,9 @@ if (@revs > 0) {
 
 $os = $subm;
 
-@branch_names = qw(release_30);
+#@branch_names = qw(release_31);
+
+@branch_names = ();
 
 for $branch (@branch_names) {
 	print STDERR "**** Branch: $branch ****\n" if $verbose;
