@@ -54,7 +54,7 @@ if (@revs > 0) {
 
 $os = $subm;
 
-#@branch_names = qw(release_31);
+#@branch_names = qw(release_32);
 
 @branch_names = ();
 
@@ -345,7 +345,7 @@ sub json {
 	$js{'comments'} = $msg;
 
 	open(my $df, "git diff-tree --numstat $hash_tree |");
-	$js{'files'} = '['.join(',',join(',', grep(s=^\d+\s+\d+\s+(.*)\r*\n*$=\"\1\"=, <$df>))).']';
+	$js{'files'} = '['.join(',',join(',', grep(s=^[-0-9]+\s+[-0-9]+\s+(.*)\r*\n*$=\"\1\"=, <$df>))).']';
 	close($df);
 
 	for (sort keys %js) {
@@ -398,6 +398,7 @@ sub export_commit {
 			print $F "M 100644 $tree->{$repo}{B} $repo\n";
 		} elsif ($tree->{$repo}{T} ne '') {
 			print $F "M 040000 $tree->{$repo}{T} $repo\n";
+			print STDERR "M 040000 $tree->{$repo}{T} $repo\n";
 		} elsif ($tree->{$repo}{H} ne '') {
 			print $F "M 160000 $tree->{$repo}{H} $repo\n";
 		}
@@ -549,7 +550,6 @@ sub parse_commit {
 	while ($_ = shift @_) {
 		if (/git-svn-id:\s+\S+@(\d+)\s+\d+/) {
 			$r{REV} = $1;
-			last;
 		} elsif (/^\s\s\s\s(.*)/) {
 			push(@t, "$1\n");
 		} else {
