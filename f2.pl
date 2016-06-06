@@ -54,7 +54,7 @@ if (@revs > 0) {
 
 $os = $subm;
 
-#@branch_names = qw(release_32);
+@branch_names = qw(release_38);
 
 @branch_names = ();
 
@@ -336,12 +336,21 @@ sub json {
 	my %js = (branch=>$branch,
 			  project=>'llvm-project');
 	$js{'revision'} = "r$rev";
-	$js{'repository'} = 'git://github.com/chapuni/llvm-project';
+	$js{'repository'} = 'git://github.com/llvm-project/llvm-project';
+	$js{'revlink'} = "http://reviews.llvm.org/rL$rev";
 	$ENV{GIT_AUTHOR_DATE} =~ /^(\d+)/;
 	$js{'when'} = $1;
 	$js{'who'} = sprintf("%s <%s>",
 						 $ENV{GIT_AUTHOR_NAME},
 						 $ENV{GIT_AUTHOR_EMAIL});
+
+	if (length($msg) > 999) {
+		my $snip = "\n(snip)\n";
+		$msg = substr($msg, 0, 999 - length($snip));
+		$msg =~ s/^(.*\n)[^\n]*$/$1/s;
+		$msg .= $snip;
+	}
+
 	$js{'comments'} = $msg;
 
 	open(my $df, "git diff-tree --numstat $hash_tree |");
@@ -366,7 +375,7 @@ sub json {
 	open(my $fj, "> _.bak") || die;
 	print $fj join('&', map {"$_=$js{$_}"} sort keys %js);
 	close($fj);
-	system('wget http://bb.pgr.jp/change_hook/base --post-file=_.bak')
+	system('wget http://bb.pgr.jp/change_hook/base --post-file=_.bak -O /dev/null')
 		if $json;
 }
 
